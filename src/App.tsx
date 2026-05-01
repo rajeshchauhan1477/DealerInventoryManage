@@ -12,13 +12,6 @@ function AppContent() {
   if (!token) {
     return (
       <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-4">
-        <div className="mb-8 text-center max-w-md">
-          <h1 className="text-2xl font-bold text-slate-800 mb-2">System Preview</h1>
-          <p className="text-slate-500 text-sm">
-            This is a production-ready system with a separate Admin Web App and a simulated Mobile Client.
-            Use <code className="bg-white px-1 rounded border">admin</code> / <code className="bg-white px-1 rounded border">123456</code> to access the dashboard.
-          </p>
-        </div>
         <Auth />
       </div>
     );
