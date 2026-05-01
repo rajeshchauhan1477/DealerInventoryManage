@@ -1,5 +1,5 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
+import { createServer as createViteServer, loadEnv } from "vite";
 import Database from "better-sqlite3";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
@@ -66,11 +66,11 @@ db.exec(`
 // Migrations
 try {
   db.prepare("ALTER TABLE records ADD COLUMN upload_id INTEGER").run();
-} catch (e) {}
+} catch (e) { }
 
 try {
   db.prepare("ALTER TABLE records ADD COLUMN source TEXT DEFAULT 'Manual'").run();
-} catch (e) {}
+} catch (e) { }
 
 // Seed Admin if not exists
 const adminExists = db.prepare("SELECT * FROM users WHERE role = 'admin'").get();
@@ -92,13 +92,13 @@ const authenticateToken = (req: any, res: any, next: any) => {
 
   jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
     if (err) return res.status(403).json({ error: "Forbidden" });
-    
+
     // Safety check: Ensure user still exists in the database
     const dbUser = db.prepare("SELECT id FROM users WHERE id = ?").get(user.id);
     if (!dbUser) {
       return res.status(401).json({ error: "User no longer exists. Please login again." });
     }
-    
+
     req.user = user;
     next();
   });
@@ -138,17 +138,17 @@ app.post("/api/auth/login", (req, res) => {
 
   const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
   logAction(user.id, "LOGIN", `User ${username} logged in`);
-  res.json({ 
-    token, 
-    user: { 
-      id: user.id, 
-      username: user.username, 
-      role: user.role, 
-      mobile: user.mobile, 
-      email: user.email, 
+  res.json({
+    token,
+    user: {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      mobile: user.mobile,
+      email: user.email,
       shopName: user.shop_name,
       dealerCommission: user.dealer_commission
-    } 
+    }
   });
 });
 
@@ -174,11 +174,11 @@ app.put("/api/admin/users/:id", authenticateToken, (req: any, res) => {
   const { username, mobile, email, shop_name, dealer_commission } = req.body;
   try {
     db.prepare("UPDATE users SET username = ?, mobile = ?, email = ?, shop_name = ?, dealer_commission = ? WHERE id = ?").run(
-      username, 
-      mobile, 
-      email, 
-      shop_name, 
-      dealer_commission || 0, 
+      username,
+      mobile,
+      email,
+      shop_name,
+      dealer_commission || 0,
       req.params.id
     );
     logAction(req.user.id, "ADMIN_USER_UPDATE", `Updated user ${req.params.id} details`);
@@ -191,13 +191,13 @@ app.put("/api/admin/users/:id", authenticateToken, (req: any, res) => {
 // Admin: Delete User
 app.delete("/api/admin/users/:id", authenticateToken, (req: any, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: "Admin only" });
-  
+
   const deleteUser = db.transaction(() => {
     db.prepare("DELETE FROM records WHERE user_id = ?").run(req.params.id);
     db.prepare("DELETE FROM logs WHERE user_id = ?").run(req.params.id);
     db.prepare("DELETE FROM users WHERE id = ?").run(req.params.id);
   });
-  
+
   deleteUser();
   logAction(req.user.id, "ADMIN_USER_DELETE", `Deleted user ${req.params.id} and all associated data`);
   res.json({ success: true });
@@ -255,9 +255,9 @@ app.post("/api/admin/users/:id/records/import", authenticateToken, (req: any, re
       }
     }
     if (duplicates.length > 0) {
-      return res.json({ 
-        success: false, 
-        requiresDecision: true, 
+      return res.json({
+        success: false,
+        requiresDecision: true,
         duplicates: duplicates.map(d => (d as any).company_code),
         duplicateCount: duplicates.length,
         totalCount: records.length
@@ -287,7 +287,7 @@ app.post("/api/admin/users/:id/records/import", authenticateToken, (req: any, re
       }
     }
   });
-  
+
   importRecords(records);
   logAction(req.user.id, "ADMIN_USER_IMPORT", `Imported ${imported}, Updated ${updated}, Skipped ${skipped} for user ${targetUserId}`);
   res.json({ success: true, imported, updated, skipped });
@@ -297,7 +297,7 @@ app.post("/api/admin/users/:id/records/import", authenticateToken, (req: any, re
 app.put("/api/admin/profile", authenticateToken, (req: any, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: "Admin only" });
   const { username, email, pin } = req.body;
-  
+
   try {
     if (pin) {
       const hashedPin = bcrypt.hashSync(pin, 10);
@@ -326,21 +326,21 @@ app.post("/api/records/bulk-delete", authenticateToken, (req: any, res) => {
   try {
     const { ids } = req.body;
     const userId = Number(req.user.id);
-    
+
     console.log(`Bulk delete requested by user ${userId}. IDs:`, ids);
-    
+
     if (!Array.isArray(ids)) {
       console.error("Bulk delete failed: ids is not an array", ids);
       return res.status(400).json({ error: "Invalid data: ids must be an array" });
     }
-    
+
     if (ids.length === 0) {
       return res.json({ success: true, count: 0 });
     }
-    
+
     // We'll process this in a transaction for atomicity and speed
     const deleteStmt = db.prepare("DELETE FROM records WHERE id = ? AND user_id = ?");
-    
+
     let totalDeleted = 0;
     const transaction = db.transaction((idList) => {
       let count = 0;
@@ -352,12 +352,12 @@ app.post("/api/records/bulk-delete", authenticateToken, (req: any, res) => {
       }
       return count;
     });
-    
+
     totalDeleted = transaction(ids);
-    
+
     console.log(`Bulk delete complete. User ${userId} specifically requested ${ids.length} IDs, ${totalDeleted} were deleted.`);
     logAction(userId, "RECORD_BULK_DELETE", `Deleted ${totalDeleted} records out of ${ids.length} requested`);
-    
+
     res.json({ success: true, count: totalDeleted, requested: ids.length });
   } catch (error: any) {
     console.error("Bulk delete endpoint error:", error);
@@ -382,10 +382,10 @@ app.post("/api/records", authenticateToken, (req: any, res) => {
   const userId = Number(req.user.id);
   const user: any = db.prepare("SELECT dealer_commission FROM users WHERE id = ?").get(userId);
   const commission = user?.dealer_commission || 0;
-  
+
   // Check for duplicate
   const existing: any = db.prepare("SELECT id FROM records WHERE user_id = ? AND company_code = ?").get(userId, companyCode);
-  
+
   if (existing && !overwrite) {
     return res.json({ success: false, duplicate: true, existingId: existing.id });
   }
@@ -395,7 +395,7 @@ app.post("/api/records", authenticateToken, (req: any, res) => {
     logAction(userId, "RECORD_UPDATE", `Overwrote existing record: ${dealerCode}/${companyCode}`);
     return res.json({ success: true, id: existing.id, updated: true });
   }
-  
+
   const result = db.prepare("INSERT INTO records (user_id, dealer_code, company_code, cost_price, dealer_commission, source) VALUES (?, ?, ?, ?, ?, ?)").run(userId, dealerCode, companyCode, costPrice || 0, commission, 'Manual');
   logAction(userId, "RECORD_ADD", `Added record: ${dealerCode}/${companyCode}`);
   res.json({ success: true, id: result.lastInsertRowid });
@@ -423,7 +423,7 @@ app.post("/api/records/bulk-import", authenticateToken, (req: any, res) => {
   if (!strategy && (!overwriteCodes || overwriteCodes.length === 0)) {
     const duplicates = [];
     const checkStmt = db.prepare("SELECT id, company_code FROM records WHERE user_id = ? AND company_code = ?");
-    
+
     for (const record of records) {
       const existing = checkStmt.get(userId, record.company_code);
       if (existing) {
@@ -432,9 +432,9 @@ app.post("/api/records/bulk-import", authenticateToken, (req: any, res) => {
     }
 
     if (duplicates.length > 0) {
-      return res.json({ 
-        success: false, 
-        requiresDecision: true, 
+      return res.json({
+        success: false,
+        requiresDecision: true,
         duplicates: duplicates.map(d => (d as any).company_code),
         duplicateCount: duplicates.length,
         totalCount: records.length
@@ -454,10 +454,10 @@ app.post("/api/records/bulk-import", authenticateToken, (req: any, res) => {
     const transaction = db.transaction((data, uploadId, src) => {
       for (const record of data) {
         const existing: any = checkStmt.get(userId, record.company_code);
-        
+
         if (existing) {
           const shouldOverwrite = strategy === 'overwrite' || (Array.isArray(overwriteCodes) && overwriteCodes.includes(record.company_code));
-          
+
           if (shouldOverwrite) {
             updateStmt.run(uploadId, record.dealer_code, record.cost_price || 0, commission, src, userId, record.company_code);
             updated++;
@@ -512,7 +512,7 @@ app.put("/api/profile", authenticateToken, (req: any, res) => {
 app.put("/api/profile/pin", authenticateToken, (req: any, res) => {
   const { oldPin, newPin } = req.body;
   const user: any = db.prepare("SELECT pin FROM users WHERE id = ?").get(req.user.id);
-  
+
   if (!bcrypt.compareSync(oldPin, user.pin)) {
     return res.status(400).json({ error: "Current PIN is incorrect" });
   }
@@ -535,10 +535,10 @@ app.post("/api/auth/reset-pin-request", (req, res) => {
   // In a real app, we would generate a temporary PIN or reset link and send via SMS/Email
   // For this demo, we'll simulate the "sharing" by logging it and returning success
   logAction(user.id, "PIN_RESET_REQUEST", `PIN reset requested for ${username}. Simulated send to ${user.email} and ${user.mobile}`);
-  
-  res.json({ 
-    success: true, 
-    message: `A reset instruction has been sent to your registered email (${user.email}) and mobile (${user.mobile}).` 
+
+  res.json({
+    success: true,
+    message: `A reset instruction has been sent to your registered email (${user.email}) and mobile (${user.mobile}).`
   });
 });
 
@@ -584,9 +584,25 @@ async function startServer() {
   const PORT = 3000;
 
   if (process.env.NODE_ENV !== "production") {
+    const env = loadEnv(process.env.NODE_ENV || "development", process.cwd(), "");
+    const [{ default: reactPlugin }, { default: tailwindcssPlugin }] = await Promise.all([
+      import('@vitejs/plugin-react'),
+      import('@tailwindcss/vite'),
+    ]);
+
     const vite = await createViteServer({
+      root: __dirname,
       server: { middlewareMode: true },
       appType: "spa",
+      plugins: [reactPlugin(), tailwindcssPlugin()],
+      define: {
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      },
+      resolve: {
+        alias: {
+          '@': path.resolve(__dirname, '.'),
+        },
+      },
     });
     app.use(vite.middlewares);
   } else {
